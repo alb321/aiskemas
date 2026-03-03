@@ -3,6 +3,8 @@
 A draw.io plugin that adds an **AI-powered right sidebar** (Google Gemini) which
 reads your diagram and can create, modify, or delete elements on your behalf.
 
+> **Repository:** <https://github.com/alb321/aiskemas>
+
 ---
 
 ## Features
@@ -26,22 +28,29 @@ reads your diagram and can create, modify, or delete elements on your behalf.
 > or a **self-hosted Docker** instance. It does **not** work with draw.io Desktop,
 > Confluence, or Jira.
 
-### Option A – Load via URL parameter (one-time)
+### Option A – One-click (hosted on GitHub)
 
-Host `aichat.js` on a publicly reachable URL, then open draw.io with:
+Click the link below to open draw.io with the plugin already loaded:
 
 ```
-https://app.diagrams.net/?plugins=1&p=<url-encoded-URL-to-aichat.js>
+https://app.diagrams.net/?plugins=1&p=https%3A%2F%2Fraw.githubusercontent.com%2Falb321%2Faiskemas%2Fmain%2Faichat.js
+```
+
+Or use the raw file URL directly in any host-via-URL workflow:
+
+```
+https://raw.githubusercontent.com/alb321/aiskemas/main/aichat.js
 ```
 
 ### Option B – Load as a custom plugin (permanent)
 
-1. Host `aichat.js` somewhere accessible (e.g. GitHub Pages, a local server).
-2. In draw.io: **Extras → Edit Diagram → Plugins tab** (or **Extras → Load Plugin…**).
-3. Paste the URL to `aichat.js` and click **OK / Apply**.
-4. Reload the tab.
+1. In draw.io: **Extras → Edit Diagram → Plugins tab** (or **Extras → Load Plugin…**).
+2. Paste the raw URL above and click **OK / Apply**.
+3. Reload the tab.
 
 ### Option C – Local development server (quick test)
+
+> Use this when you want to test local edits to `aichat.js` before pushing.
 
 ```bash
 # from the project folder
