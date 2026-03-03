@@ -28,25 +28,30 @@ reads your diagram and can create, modify, or delete elements on your behalf.
 > or a **self-hosted Docker** instance. It does **not** work with draw.io Desktop,
 > Confluence, or Jira.
 
-### Option A – One-click (hosted on GitHub)
+### Option A – One-click via jsDelivr CDN
 
-Click the link below to open draw.io with the plugin already loaded:
+`raw.githubusercontent.com` cannot be used directly as a draw.io plugin host (CORS).
+Use the **jsDelivr** CDN URL instead — it adds the required CORS headers automatically:
 
+**Plugin file URL:**
 ```
-https://app.diagrams.net/?plugins=1&p=https%3A%2F%2Fraw.githubusercontent.com%2Falb321%2Faiskemas%2Fmain%2Faichat.js
+https://cdn.jsdelivr.net/gh/alb321/aiskemas/aichat.js
 ```
 
-Or use the raw file URL directly in any host-via-URL workflow:
-
+**Open draw.io with the plugin pre-loaded:**
 ```
-https://raw.githubusercontent.com/alb321/aiskemas/main/aichat.js
+https://app.diagrams.net/?plugins=1&p=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2Falb321%2Faiskemas%2Faichat.js
 ```
 
 ### Option B – Load as a custom plugin (permanent)
 
-1. In draw.io: **Extras → Edit Diagram → Plugins tab** (or **Extras → Load Plugin…**).
-2. Paste the raw URL above and click **OK / Apply**.
-3. Reload the tab.
+1. In draw.io: **Extras → Load Plugin…**
+2. Paste the jsDelivr URL above (`https://cdn.jsdelivr.net/gh/alb321/aiskemas/aichat.js`) and click **OK**.
+3. Reload the tab. The plugin will load automatically on every visit.
+
+> **Tip – GitHub Pages alternative:** Enable GitHub Pages on this repo  
+> (Settings → Pages → branch: main, folder: /) and use  
+> `https://alb321.github.io/aiskemas/aichat.js` as the plugin URL.
 
 ### Option C – Local development server (quick test)
 
