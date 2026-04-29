@@ -15,7 +15,8 @@ import { FileService } from '../../services/file.service';
          (dblclick)="onDoubleClick($event)"
          (mousedown)="onMouseDown($event)"
          (mousemove)="onMouseMove($event)"
-         (mouseup)="onMouseUp($event)">
+         (mouseup)="onMouseUp($event)"
+         (wheel)="onWheel($event)">>
     </div>
     @if (selecting) {
       <div class="selection-box"
@@ -164,6 +165,17 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   private cancelEdit(): void {
     this.editing = false;
     this.editingNodeId = null;
+  }
+
+  onWheel(event: WheelEvent): void {
+    event.preventDefault();
+    if (event.ctrlKey || event.metaKey) {
+      // Pinch zoom (trackpad reports pinch as ctrl+wheel)
+      this.diagram.zoomAtPoint(event.deltaY, event.clientX, event.clientY);
+    } else {
+      // Two-finger pan
+      this.diagram.pan(-event.deltaX, -event.deltaY);
+    }
   }
 
   onDoubleClick(event: MouseEvent): void {

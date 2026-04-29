@@ -1,11 +1,23 @@
 <div class="app-layout">
   <app-toolbar (openSettings)="showSettings = true" [saveStatus]="saveStatus"></app-toolbar>
   <app-canvas></app-canvas>
+
+  @if (hoveredNode && !aiMenuNode) {
+    <button class="ai-trigger-btn"
+            [style.left.px]="hoveredNode.bbox.x + hoveredNode.bbox.width - 20"
+            [style.top.px]="hoveredNode.bbox.y - 30"
+            (mousedown)="openAiMenu($event)"
+            (mouseenter)="keepHover()"
+            (mouseleave)="clearHover()">
+      ✨
+    </button>
+  }
+
   <app-ai-context-menu
-    [visible]="!!selectedNode"
-    [nodeId]="selectedNode?.id || null"
-    [nodeText]="selectedNode?.text || ''"
-    [position]="selectedNode?.position || { x: 0, y: 0 }">
+    [visible]="!!aiMenuNode"
+    [nodeId]="aiMenuNode?.id || null"
+    [nodeText]="aiMenuNode?.text || ''"
+    [position]="aiMenuPosition">
   </app-ai-context-menu>
 
   @if (showSettings) {

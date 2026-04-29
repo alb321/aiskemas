@@ -23,18 +23,29 @@ import { FileService } from './services/file.service';
 })
 export class AppComponent implements OnDestroy {
   showSettings = false;
-  selectedNode: { id: string; text: string; position: { x: number; y: number } } | null = null;
+  hoveredNode: { id: string; text: string; bbox: { x: number; y: number; width: number; height: number } } | null = null;
+  aiMenuNode: { id: string; text: string } | null = null;
+  aiMenuPosition = { x: 0, y: 0 };
   saveStatus: 'idle' | 'saving' | 'saved' = 'idle';
   private subs: Subscription[] = [];
   private saveTimeout: any;
+  private hoverTimeout: any;
 
   constructor(
     private diagram: DiagramService,
     private fileService: FileService,
   ) {
     this.subs.push(
-      this.diagram.nodeSelected$.subscribe(node => {
-        this.selectedNode = node;
+      this.diagram.nodeHover$.subscribe(node => {
+        if (this.aiMenuNode) return;
+        if (node) {
+          clearTimeout(this.hoverTimeout);
+          this.hoveredNode = node;
+        } else {
+          this.hoverTimeout = setTimeout(() => {
+            this.hoveredNode = null;
+          }, 200);
+        }
       }),
       this.diagram.schemaChanged$.pipe(debounceTime(500)).subscribe(() => {
         this.saveStatus = 'saving';
@@ -57,9 +68,39 @@ export class AppComponent implements OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    this.selectedNode = null;
+    this.aiMenuNode = null;
+    this.hoveredNode = null;
     this.showSettings = false;
     this.diagram.clearSelection();
+  }
+
+  @HostListener('document:mousedown', ['$event'])
+  onDocClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (this.aiMenuNode && !target.closest('.context-menu') && !target.closest('.ai-trigger-btn')) {
+      this.aiMenuNode = null;
+    }
+  }
+
+  keepHover(): void {
+    clearTimeout(this.hoverTimeout);
+  }
+
+  clearHover(): void {
+    this.hoverTimeout = setTimeout(() => {
+      this.hoveredNode = null;
+    }, 200);
+  }
+
+  openAiMenu(event: MouseEvent): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (!this.hoveredNode) return;
+    this.aiMenuNode = { id: this.hoveredNode.id, text: this.hoveredNode.text };
+    this.aiMenuPosition = {
+      x: this.hoveredNode.bbox.x + this.hoveredNode.bbox.width,
+      y: this.hoveredNode.bbox.y,
+    };
   }
 
   @HostListener('document:keydown', ['$event'])

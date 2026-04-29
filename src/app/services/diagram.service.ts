@@ -23,6 +23,7 @@ export class DiagramService {
   selectionChanged$ = new Subject<string[]>();
   schemaChanged$ = new Subject<void>();
   editNode$ = new Subject<{ id: string; text: string; bbox: { x: number; y: number; width: number; height: number } }>();
+  nodeHover$ = new Subject<{ id: string; text: string; bbox: { x: number; y: number; width: number; height: number } } | null>();
 
   constructor(private zone: NgZone) {}
 
@@ -103,6 +104,29 @@ export class DiagramService {
           text,
           bbox: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
         });
+      });
+    });
+
+    // Hover on element
+    this.paper.on('element:mouseenter', (elementView: joint.dia.ElementView) => {
+      this.zone.run(() => {
+        const model = elementView.model;
+        const id = model.id as string;
+        const text = (model.attr('label/text') as string) || '';
+        const bbox = elementView.getBBox();
+        const paperRect = this.paper.el.getBoundingClientRect();
+        this.nodeHover$.next({ id, text, bbox: {
+          x: paperRect.left + bbox.x,
+          y: paperRect.top + bbox.y,
+          width: bbox.width,
+          height: bbox.height,
+        } });
+      });
+    });
+
+    this.paper.on('element:mouseleave', () => {
+      this.zone.run(() => {
+        this.nodeHover$.next(null);
       });
     });
 
@@ -408,6 +432,36 @@ export class DiagramService {
   resetZoom(): void {
     this.paper.scale(1, 1);
     this.paper.translate(0, 0);
+  }
+
+  pan(dx: number, dy: number): void {
+    const tx = this.paper.translate();
+    this.paper.translate(tx.tx + dx, tx.ty + dy);
+  }
+
+  zoomAtPoint(delta: number, clientX: number, clientY: number): void {
+    const oldScale = this.paper.scale().sx;
+    const factor = delta > 0 ? 0.95 : 1.05;
+    const newScale = Math.min(Math.max(oldScale * factor, 0.2), 5);
+
+    const svgPoint = this.paper.clientToLocalPoint(clientX, clientY);
+    this.paper.scale(newScale, newScale);
+    const newSvgPoint = this.paper.clientToLocalPoint(clientX, clientY);
+
+    const tx = this.paper.translate();
+    this.paper.translate(
+      tx.tx + (newSvgPoint.x - svgPoint.x) * newScale,
+      tx.ty + (newSvgPoint.y - svgPoint.y) * newScale,
+    );
+  }
+
+  getElementViewBBox(id: string): { x: number; y: number; width: number; height: number } | null {
+    const cell = this.graph.getCell(id);
+    if (!cell || !cell.isElement()) return null;
+    const view = this.paper.findViewByModel(cell);
+    if (!view) return null;
+    const bbox = view.getBBox();
+    return { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
   }
 
   updateCanvasTheme(theme: Theme): void {
