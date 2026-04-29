@@ -1,0 +1,14 @@
+<div class="app-layout">
+  <app-toolbar (openSettings)="showSettings = true"></app-toolbar>
+  <app-canvas></app-canvas>
+  <app-ai-context-menu
+    [visible]="!!selectedNode"
+    [nodeId]="selectedNode?.id || null"
+    [nodeText]="selectedNode?.text || ''"
+    [position]="selectedNode?.position || { x: 0, y: 0 }">
+  </app-ai-context-menu>
+
+  @if (showSettings) {
+    <app-settings-panel (close)="showSettings = false"></app-settings-panel>
+  }
+</div>
