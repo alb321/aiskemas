@@ -1,10 +1,12 @@
-import { Component, HostListener } from '@angular/core';
+import { Component, HostListener, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subscription, debounceTime } from 'rxjs';
 import { CanvasComponent } from './components/canvas/canvas.component';
 import { ToolbarComponent } from './components/toolbar/toolbar.component';
 import { AIContextMenuComponent } from './components/ai-context-menu/ai-context-menu.component';
 import { SettingsPanelComponent } from './components/settings-panel/settings-panel.component';
 import { DiagramService } from './services/diagram.service';
+import { FileService } from './services/file.service';
 
 @Component({
   selector: 'app-root',
@@ -19,14 +21,38 @@ import { DiagramService } from './services/diagram.service';
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
-export class AppComponent {
+export class AppComponent implements OnDestroy {
   showSettings = false;
   selectedNode: { id: string; text: string; position: { x: number; y: number } } | null = null;
+  saveStatus: 'idle' | 'saving' | 'saved' = 'idle';
+  private subs: Subscription[] = [];
+  private saveTimeout: any;
 
-  constructor(private diagram: DiagramService) {
-    this.diagram.nodeSelected$.subscribe(node => {
-      this.selectedNode = node;
-    });
+  constructor(
+    private diagram: DiagramService,
+    private fileService: FileService,
+  ) {
+    this.subs.push(
+      this.diagram.nodeSelected$.subscribe(node => {
+        this.selectedNode = node;
+      }),
+      this.diagram.schemaChanged$.pipe(debounceTime(500)).subscribe(() => {
+        this.saveStatus = 'saving';
+        const schema = this.diagram.toSchema('Autosave');
+        this.fileService.autosave(schema);
+        clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(() => {
+          this.saveStatus = 'saved';
+          this.saveTimeout = setTimeout(() => {
+            this.saveStatus = 'idle';
+          }, 2000);
+        }, 300);
+      }),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subs.forEach(s => s.unsubscribe());
   }
 
   @HostListener('document:keydown.escape')

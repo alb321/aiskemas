@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DiagramService } from '../../services/diagram.service';
 import { FileService } from '../../services/file.service';
@@ -51,6 +51,17 @@ import { ThemeService } from '../../services/theme.service';
           placeholder="Schema name..."
         />
       </div>
+
+      <div class="toolbar-group save-status" [class.visible]="saveStatus !== 'idle'">
+        @if (saveStatus === 'saving') {
+          <span class="status-icon spinning">⟳</span>
+          <span class="status-text">Saving...</span>
+        }
+        @if (saveStatus === 'saved') {
+          <span class="status-icon">☁️</span>
+          <span class="status-text">Saved</span>
+        }
+      </div>
     </div>
   `,
   styles: [`
@@ -95,9 +106,36 @@ import { ThemeService } from '../../services/theme.service';
     .schema-name:focus {
       border-color: var(--accent);
     }
+    .save-status {
+      margin-left: auto;
+      opacity: 0;
+      transition: opacity 0.2s;
+      font-size: 13px;
+      color: var(--text-secondary);
+      gap: 4px;
+    }
+    .save-status.visible {
+      opacity: 1;
+    }
+    .status-icon {
+      font-size: 14px;
+    }
+    .status-icon.spinning {
+      display: inline-block;
+      animation: spin 0.8s linear infinite;
+    }
+    .status-text {
+      font-size: 12px;
+      letter-spacing: 0.3px;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
   `],
 })
 export class ToolbarComponent {
+  @Input() saveStatus: 'idle' | 'saving' | 'saved' = 'idle';
   @Output() openSettings = new EventEmitter<void>();
 
   schemaName = 'Untitled Schema';

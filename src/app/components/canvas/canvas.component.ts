@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { DiagramService } from '../../services/diagram.service';
 import { ThemeService } from '../../services/theme.service';
+import { FileService } from '../../services/file.service';
 
 @Component({
   selector: 'app-canvas',
@@ -58,6 +59,7 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   constructor(
     private diagram: DiagramService,
     private theme: ThemeService,
+    private fileService: FileService,
   ) {}
 
   ngAfterViewInit(): void {
@@ -65,6 +67,12 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
     this.themeSub = this.theme.theme$.subscribe(t => {
       this.diagram.updateCanvasTheme(t);
     });
+
+    // Restore autosaved schema
+    const saved = this.fileService.loadAutosave();
+    if (saved) {
+      this.diagram.loadSchema(saved);
+    }
   }
 
   ngOnDestroy(): void {

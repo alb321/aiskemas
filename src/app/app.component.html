@@ -1,5 +1,5 @@
 <div class="app-layout">
-  <app-toolbar (openSettings)="showSettings = true"></app-toolbar>
+  <app-toolbar (openSettings)="showSettings = true" [saveStatus]="saveStatus"></app-toolbar>
   <app-canvas></app-canvas>
   <app-ai-context-menu
     [visible]="!!selectedNode"

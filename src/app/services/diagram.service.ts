@@ -17,6 +17,7 @@ export class DiagramService {
   private graph!: joint.dia.Graph;
   private paper!: joint.dia.Paper;
   private selectedIds = new Set<string>();
+  private muteChanges = false;
 
   nodeSelected$ = new Subject<{ id: string; text: string; position: { x: number; y: number } } | null>();
   selectionChanged$ = new Subject<string[]>();
@@ -91,11 +92,13 @@ export class DiagramService {
 
     // Any change
     this.graph.on('change', () => {
+      if (this.muteChanges) return;
       this.zone.run(() => {
         this.schemaChanged$.next();
       });
     });
     this.graph.on('add remove', () => {
+      if (this.muteChanges) return;
       this.zone.run(() => {
         this.schemaChanged$.next();
       });
@@ -151,6 +154,7 @@ export class DiagramService {
   }
 
   private applySelectionHighlight(): void {
+    this.muteChanges = true;
     this.graph.getElements().forEach(el => {
       const id = el.id as string;
       if (this.selectedIds.has(id)) {
@@ -161,6 +165,7 @@ export class DiagramService {
         el.attr('body/stroke', '#333333');
       }
     });
+    this.muteChanges = false;
   }
 
   clientToLocalPoint(clientX: number, clientY: number): { x: number; y: number } {
