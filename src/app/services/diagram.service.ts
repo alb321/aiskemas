@@ -12,12 +12,28 @@ import {
 } from '../models/schema.model';
 import { Theme } from './theme.service';
 
+// Custom resize tool — extends abstract Control
+class ResizeTool extends joint.elementTools.Control {
+  protected override getPosition(view: joint.dia.ElementView) {
+    const model = view.model;
+    const size = model.size();
+    return { x: size.width, y: size.height };
+  }
+
+  protected override setPosition(view: joint.dia.ElementView, coordinates: any) {
+    const model = view.model;
+    const newWidth = Math.max(60, coordinates.x);
+    const newHeight = Math.max(30, coordinates.y);
+    model.resize(newWidth, newHeight);
+  }
+}
 @Injectable({ providedIn: 'root' })
 export class DiagramService {
   private graph!: joint.dia.Graph;
   private paper!: joint.dia.Paper;
   private selectedIds = new Set<string>();
   private muteChanges = false;
+  private justCreatedId: string | null = null;
 
   nodeSelected$ = new Subject<{ id: string; text: string; position: { x: number; y: number } } | null>();
   selectionChanged$ = new Subject<string[]>();
@@ -38,10 +54,29 @@ export class DiagramService {
       gridSize: 10,
       drawGrid: { name: 'dot', args: { color: '#e0e0e0' } },
       background: { color: '#fafafa' },
-      interactive: true,
+      interactive: {
+        elementMove: true,
+        linkMove: true,
+        labelMove: false,
+      },
       defaultConnector: { name: 'smooth' },
-      defaultRouter: { name: 'manhattan' },
+      defaultRouter: { name: 'normal' },
       connectionStrategy: joint.connectionStrategies.pinAbsolute,
+      linkPinning: false, // links must connect to elements
+      validateConnection: (cellViewS, _magnetS, cellViewT) => {
+        // Prevent self-connections
+        return cellViewS !== cellViewT;
+      },
+      defaultLink: () => new joint.shapes.standard.Link({
+        attrs: {
+          line: {
+            stroke: DEFAULT_EDGE_STYLE.stroke,
+            strokeWidth: DEFAULT_EDGE_STYLE.strokeWidth,
+            targetMarker: { type: 'path', d: 'M 10 -5 0 0 10 5 z' },
+          },
+        },
+        connector: { name: 'smooth' },
+      }),
     });
 
     this.setupEvents();
@@ -89,7 +124,44 @@ export class DiagramService {
     this.paper.on('blank:pointerclick', () => {
       this.zone.run(() => {
         this.clearSelection();
+        this.removeAllTools();
       });
+    });
+
+    // Show element tools (resize + connect) on click
+    this.paper.on('element:pointerclick', (elementView: joint.dia.ElementView) => {
+      this.removeAllTools();
+      const boundaryTool = new joint.elementTools.Boundary({ padding: 4 });
+      const resizeTool = new ResizeTool({
+        handleAttributes: {
+          width: 10,
+          height: 10,
+          rx: 2,
+          ry: 2,
+          fill: '#4a90d9',
+          stroke: '#fff',
+          'stroke-width': 1,
+          cursor: 'nwse-resize',
+        },
+      });
+      const connectTool = new joint.elementTools.Connect({
+        magnet: 'body',
+      });
+      const toolsView = new joint.dia.ToolsView({
+        tools: [boundaryTool, resizeTool, connectTool],
+      });
+      elementView.addTools(toolsView);
+    });
+
+    // Show link tools (vertices + remove) on click
+    this.paper.on('link:pointerclick', (linkView: joint.dia.LinkView) => {
+      this.removeAllTools();
+      const verticesTool = new joint.linkTools.Vertices();
+      const removeTool = new joint.linkTools.Remove();
+      const toolsView = new joint.dia.ToolsView({
+        tools: [verticesTool, removeTool],
+      });
+      linkView.addTools(toolsView);
     });
 
     // Double-click on element — inline edit
@@ -156,6 +228,10 @@ export class DiagramService {
     this.applySelectionHighlight();
     this.selectionChanged$.next([]);
     this.nodeSelected$.next(null);
+  }
+
+  private removeAllTools(): void {
+    this.paper.removeTools();
   }
 
   selectByArea(rect: { x: number; y: number; width: number; height: number }): void {
@@ -228,6 +304,7 @@ export class DiagramService {
           strokeWidth: nodeStyle.strokeWidth,
           rx: 8,
           ry: 8,
+          magnet: true,
         },
         label: {
           text,
@@ -250,8 +327,7 @@ export class DiagramService {
       id,
       source: { id: sourceId },
       target: { id: targetId },
-      connector: { name: type === 'curve' ? 'smooth' : 'normal' },
-      router: { name: 'manhattan' },
+      connector: { name: 'smooth' },
       attrs: {
         line: {
           stroke: DEFAULT_EDGE_STYLE.stroke,
