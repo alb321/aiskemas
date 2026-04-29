@@ -33,5 +33,21 @@ export class AppComponent {
   onEscape(): void {
     this.selectedNode = null;
     this.showSettings = false;
+    this.diagram.clearSelection();
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      // Don't delete when typing in an input/textarea
+      const tag = (event.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      const ids = this.diagram.getSelectedIds();
+      if (ids.length) {
+        ids.forEach(id => this.diagram.removeElement(id));
+        this.diagram.clearSelection();
+      }
+    }
   }
 }

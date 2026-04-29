@@ -16,8 +16,10 @@ import { Theme } from './theme.service';
 export class DiagramService {
   private graph!: joint.dia.Graph;
   private paper!: joint.dia.Paper;
+  private selectedIds = new Set<string>();
 
   nodeSelected$ = new Subject<{ id: string; text: string; position: { x: number; y: number } } | null>();
+  selectionChanged$ = new Subject<string[]>();
   schemaChanged$ = new Subject<void>();
 
   constructor(private zone: NgZone) {}
@@ -43,25 +45,47 @@ export class DiagramService {
   }
 
   private setupEvents(): void {
-    // Node click
+    // Node click — single or multi select
     this.paper.on('element:pointerclick', (elementView: joint.dia.ElementView, evt: joint.dia.Event) => {
       this.zone.run(() => {
         const model = elementView.model;
         const id = model.id as string;
         const text = (model.attr('label/text') as string) || '';
         const bbox = elementView.getBBox();
-        this.nodeSelected$.next({
-          id,
-          text,
-          position: { x: bbox.x + bbox.width, y: bbox.y },
-        });
+        const nativeEvt = (evt as any).originalEvent || evt;
+        const isMulti = nativeEvt?.shiftKey || nativeEvt?.metaKey || nativeEvt?.ctrlKey;
+
+        if (isMulti) {
+          if (this.selectedIds.has(id)) {
+            this.selectedIds.delete(id);
+          } else {
+            this.selectedIds.add(id);
+          }
+        } else {
+          this.selectedIds.clear();
+          this.selectedIds.add(id);
+        }
+
+        this.applySelectionHighlight();
+        this.selectionChanged$.next([...this.selectedIds]);
+
+        // Emit single node info for context menu
+        if (this.selectedIds.size === 1) {
+          this.nodeSelected$.next({
+            id,
+            text,
+            position: { x: bbox.x + bbox.width, y: bbox.y },
+          });
+        } else {
+          this.nodeSelected$.next(null);
+        }
       });
     });
 
-    // Blank click - deselect
+    // Blank click - deselect all
     this.paper.on('blank:pointerclick', () => {
       this.zone.run(() => {
-        this.nodeSelected$.next(null);
+        this.clearSelection();
       });
     });
 
@@ -76,6 +100,72 @@ export class DiagramService {
         this.schemaChanged$.next();
       });
     });
+  }
+
+  // --- Selection API ---
+
+  getSelectedIds(): string[] {
+    return [...this.selectedIds];
+  }
+
+  clearSelection(): void {
+    this.selectedIds.clear();
+    this.applySelectionHighlight();
+    this.selectionChanged$.next([]);
+    this.nodeSelected$.next(null);
+  }
+
+  selectByArea(rect: { x: number; y: number; width: number; height: number }): void {
+    this.selectedIds.clear();
+    this.graph.getElements().forEach(el => {
+      const pos = el.position();
+      const size = el.size();
+      const elRight = pos.x + size.width;
+      const elBottom = pos.y + size.height;
+      const rectRight = rect.x + rect.width;
+      const rectBottom = rect.y + rect.height;
+
+      // Element intersects selection rectangle
+      if (pos.x < rectRight && elRight > rect.x &&
+          pos.y < rectBottom && elBottom > rect.y) {
+        this.selectedIds.add(el.id as string);
+      }
+    });
+    this.applySelectionHighlight();
+    this.selectionChanged$.next([...this.selectedIds]);
+    if (this.selectedIds.size === 1) {
+      const id = [...this.selectedIds][0];
+      const el = this.graph.getCell(id) as joint.dia.Element;
+      const view = this.paper.findViewByModel(el);
+      if (view) {
+        const bbox = view.getBBox();
+        this.nodeSelected$.next({
+          id,
+          text: (el.attr('label/text') as string) || '',
+          position: { x: bbox.x + bbox.width, y: bbox.y },
+        });
+      }
+    } else {
+      this.nodeSelected$.next(null);
+    }
+  }
+
+  private applySelectionHighlight(): void {
+    this.graph.getElements().forEach(el => {
+      const id = el.id as string;
+      if (this.selectedIds.has(id)) {
+        el.attr('body/strokeWidth', 3);
+        el.attr('body/stroke', '#4a90d9');
+      } else {
+        el.attr('body/strokeWidth', 2);
+        el.attr('body/stroke', '#333333');
+      }
+    });
+  }
+
+  clientToLocalPoint(clientX: number, clientY: number): { x: number; y: number } {
+    const point = this.paper.clientToLocalPoint({ x: clientX, y: clientY });
+    return { x: point.x, y: point.y };
   }
 
   addNode(text: string, x: number, y: number, style?: Partial<NodeStyle>): string {
