@@ -22,6 +22,7 @@ export class DiagramService {
   nodeSelected$ = new Subject<{ id: string; text: string; position: { x: number; y: number } } | null>();
   selectionChanged$ = new Subject<string[]>();
   schemaChanged$ = new Subject<void>();
+  editNode$ = new Subject<{ id: string; text: string; bbox: { x: number; y: number; width: number; height: number } }>();
 
   constructor(private zone: NgZone) {}
 
@@ -87,6 +88,21 @@ export class DiagramService {
     this.paper.on('blank:pointerclick', () => {
       this.zone.run(() => {
         this.clearSelection();
+      });
+    });
+
+    // Double-click on element — inline edit
+    this.paper.on('element:pointerdblclick', (elementView: joint.dia.ElementView) => {
+      this.zone.run(() => {
+        const model = elementView.model;
+        const id = model.id as string;
+        const text = (model.attr('label/text') as string) || '';
+        const bbox = elementView.getBBox();
+        this.editNode$.next({
+          id,
+          text,
+          bbox: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
+        });
       });
     });
 

@@ -1,5 +1,6 @@
-import { Component, ElementRef, AfterViewInit, ViewChild, OnDestroy } from '@angular/core';
+import { Component, ElementRef, AfterViewInit, ViewChild, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { DiagramService } from '../../services/diagram.service';
 import { ThemeService } from '../../services/theme.service';
@@ -8,7 +9,7 @@ import { FileService } from '../../services/file.service';
 @Component({
   selector: 'app-canvas',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="canvas-container" #canvasContainer
          (dblclick)="onDoubleClick($event)"
@@ -23,6 +24,19 @@ import { FileService } from '../../services/file.service';
            [style.width.px]="selectionRect.width"
            [style.height.px]="selectionRect.height">
       </div>
+    }
+    @if (editing) {
+      <textarea
+        #editInput
+        class="inline-edit"
+        [style.left.px]="editBox.x"
+        [style.top.px]="editBox.y"
+        [style.width.px]="editBox.width"
+        [style.min-height.px]="editBox.height"
+        [(ngModel)]="editText"
+        (keydown)="onEditKeydown($event)"
+        (blur)="commitEdit()">
+      </textarea>
     }
   `,
   styles: [`
@@ -46,15 +60,41 @@ import { FileService } from '../../services/file.service';
       pointer-events: none;
       z-index: 10;
     }
+    .inline-edit {
+      position: absolute;
+      z-index: 20;
+      border: 2px solid var(--accent, #4a90d9);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary, #fff);
+      color: var(--text-primary, #333);
+      resize: none;
+      outline: none;
+      overflow: hidden;
+      text-align: center;
+      line-height: 1.4;
+      box-shadow: 0 2px 8px var(--shadow, rgba(0,0,0,0.1));
+    }
   `],
 })
 export class CanvasComponent implements AfterViewInit, OnDestroy {
   @ViewChild('canvasContainer') containerRef!: ElementRef<HTMLElement>;
+  @ViewChild('editInput') editInputRef?: ElementRef<HTMLTextAreaElement>;
   private themeSub!: Subscription;
+  private editSub!: Subscription;
 
   selecting = false;
   private dragStart: { x: number; y: number } | null = null;
   selectionRect = { x: 0, y: 0, width: 0, height: 0 };
+
+  // Inline editing state
+  editing = false;
+  editText = '';
+  editBox = { x: 0, y: 0, width: 0, height: 0 };
+  private editingNodeId: string | null = null;
+  private editOriginalText = '';
 
   constructor(
     private diagram: DiagramService,
@@ -68,6 +108,18 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
       this.diagram.updateCanvasTheme(t);
     });
 
+    this.editSub = this.diagram.editNode$.subscribe(({ id, text, bbox }) => {
+      this.editingNodeId = id;
+      this.editText = text;
+      this.editOriginalText = text;
+      this.editBox = { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
+      this.editing = true;
+      setTimeout(() => {
+        this.editInputRef?.nativeElement.focus();
+        this.editInputRef?.nativeElement.select();
+      });
+    });
+
     // Restore autosaved schema
     const saved = this.fileService.loadAutosave();
     if (saved) {
@@ -77,6 +129,41 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.themeSub?.unsubscribe();
+    this.editSub?.unsubscribe();
+  }
+
+  @HostListener('document:mousedown', ['$event'])
+  onDocMouseDown(event: MouseEvent): void {
+    if (!this.editing) return;
+    const textarea = this.editInputRef?.nativeElement;
+    if (textarea && !textarea.contains(event.target as Node)) {
+      this.commitEdit();
+    }
+  }
+
+  onEditKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.commitEdit();
+    }
+    if (event.key === 'Escape') {
+      this.cancelEdit();
+    }
+  }
+
+  commitEdit(): void {
+    if (!this.editing) return;
+    const trimmed = this.editText.trim();
+    if (this.editingNodeId && trimmed !== this.editOriginalText) {
+      this.diagram.updateNodeText(this.editingNodeId, trimmed);
+    }
+    this.editing = false;
+    this.editingNodeId = null;
+  }
+
+  private cancelEdit(): void {
+    this.editing = false;
+    this.editingNodeId = null;
   }
 
   onDoubleClick(event: MouseEvent): void {
