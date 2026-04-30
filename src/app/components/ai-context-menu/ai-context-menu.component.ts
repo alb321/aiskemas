@@ -1,12 +1,13 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { DiagramService } from '../../services/diagram.service';
 import { AIService } from '../../services/ai.service';
 
 @Component({
   selector: 'app-ai-context-menu',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     @if (visible && nodeId) {
       <div class="context-menu" [style.left.px]="position.x" [style.top.px]="position.y">
@@ -23,6 +24,19 @@ import { AIService } from '../../services/ai.service';
         <button (click)="onAction('summarize')" [disabled]="loading">
           📋 Summarize
         </button>
+        <hr />
+        <div class="prompt-row">
+          <input #promptInput
+                 class="prompt-input"
+                 type="text"
+                 [(ngModel)]="promptText"
+                 placeholder="Ask AI anything..."
+                 (keydown.enter)="onPrompt()"
+                 [disabled]="loading" />
+          <button class="prompt-send" (click)="onPrompt()" [disabled]="loading || !promptText.trim()">
+            ➤
+          </button>
+        </div>
         <hr />
         <button (click)="onDelete()" class="danger">
           🗑️ Delete
@@ -105,6 +119,32 @@ import { AIService } from '../../services/ai.service';
       overflow-y: auto;
       white-space: pre-wrap;
     }
+    .prompt-row {
+      display: flex;
+      padding: 4px 8px;
+      gap: 4px;
+    }
+    .prompt-input {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 13px;
+      background: var(--bg-secondary, #f5f5f5);
+      color: var(--text-primary);
+      outline: none;
+    }
+    .prompt-input:focus {
+      border-color: var(--accent, #4a90d9);
+    }
+    .prompt-send {
+      width: 32px !important;
+      min-width: 32px;
+      padding: 4px !important;
+      text-align: center !important;
+      border-radius: 4px;
+      font-size: 14px;
+    }
   `],
 })
 export class AIContextMenuComponent {
@@ -115,11 +155,46 @@ export class AIContextMenuComponent {
 
   loading = false;
   resultText = '';
+  promptText = '';
 
   constructor(
     private diagram: DiagramService,
     private ai: AIService,
   ) {}
+
+  async onPrompt(): Promise<void> {
+    const text = this.promptText.trim();
+    if (!text || !this.nodeId) return;
+    if (!this.ai.isConfigured()) {
+      this.resultText = '⚠️ Configure AI settings first (⚙️)';
+      return;
+    }
+
+    this.loading = true;
+    this.resultText = '';
+
+    try {
+      const context = this.diagram.getNodeContext(this.nodeId);
+      const response = await this.ai.request({
+        action: 'prompt',
+        nodeText: this.nodeText,
+        context,
+        prompt: text,
+      });
+
+      if (response.nodes?.length) {
+        this.diagram.addChildNodes(this.nodeId, response.nodes.map(n => n.text));
+        this.resultText = `Added ${response.nodes.length} concepts`;
+      } else if (response.text) {
+        this.resultText = response.text;
+      }
+      this.promptText = '';
+    } catch (e: any) {
+      this.resultText = `❌ Error: ${e.message || 'Unknown error'}`;
+    } finally {
+      this.loading = false;
+    }
+  }
 
   async onAction(action: 'generate-children' | 'describe' | 'improve' | 'summarize'): Promise<void> {
     if (!this.nodeId || !this.ai.isConfigured()) {
@@ -131,7 +206,7 @@ export class AIContextMenuComponent {
     this.resultText = '';
 
     try {
-      const context = this.diagram.getConnectedNodeTexts(this.nodeId).join(', ');
+      const context = this.diagram.getNodeContext(this.nodeId);
       const response = await this.ai.request({
         action,
         nodeText: this.nodeText,

@@ -376,6 +376,37 @@ export class DiagramService {
     return neighbors.map(n => (n.attr('label/text') as string) || '');
   }
 
+  getNodeContext(id: string): string {
+    const cell = this.graph.getCell(id);
+    if (!cell) return '';
+    const el = cell as joint.dia.Element;
+    const links = this.graph.getConnectedLinks(el);
+    const parents: string[] = [];
+    const children: string[] = [];
+    for (const link of links) {
+      const srcId = (link.source() as any).id;
+      const tgtId = (link.target() as any).id;
+      if (!srcId || !tgtId) continue;
+      const otherId = srcId === id ? tgtId : srcId;
+      const other = this.graph.getCell(otherId);
+      if (!other) continue;
+      const otherText = (other.attr('label/text') as string) || '';
+      if (srcId === id) {
+        children.push(otherText);
+      } else {
+        parents.push(otherText);
+      }
+    }
+    const parts: string[] = [];
+    if (parents.length) {
+      parts.push(`Parent nodes: ${parents.map(t => `"${t}"`).join(', ')}`);
+    }
+    if (children.length) {
+      parts.push(`Child nodes: ${children.map(t => `"${t}"`).join(', ')}`);
+    }
+    return parts.join('\n') || 'No connections';
+  }
+
   addChildNodes(parentId: string, texts: string[]): void {
     const parent = this.graph.getCell(parentId) as joint.dia.Element;
     if (!parent) return;

@@ -7,10 +7,11 @@ export interface AIProvider {
 }
 
 export interface AIRequest {
-  action: 'generate-children' | 'describe' | 'improve' | 'summarize' | 'generate-schema';
+  action: 'generate-children' | 'describe' | 'improve' | 'summarize' | 'generate-schema' | 'prompt';
   nodeText?: string;
   context?: string;
   schema?: string;
+  prompt?: string;
 }
 
 export interface AIGeneratedNode {
