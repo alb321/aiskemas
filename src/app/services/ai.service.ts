@@ -80,8 +80,9 @@ Keep each concept name short (1-4 words).`;
 2. A short summary (max 8-10 words) to annotate a concept map node.
 Respond ONLY with JSON: {"long": "detailed explanation", "short": "brief summary"}`;
       case 'improve':
-        return `You are a study assistant. Given a concept label, suggest a better, more precise or memorable wording.
-Respond with plain text: just the improved label.`;
+        return `You are a study assistant. Given a concept (which may have a title and a description separated by a newline), suggest improved wording.
+Respond ONLY with JSON: {"title": "improved title", "description": "improved description or empty string if none"}
+Keep the title short (1-5 words). If the original has no description, set description to empty string.`;
       case 'summarize':
         return `You are a study assistant. Given a concept and its related sub-concepts, create a brief study summary.
 Respond with plain text only.`;
@@ -163,6 +164,21 @@ If the instruction asks for something that doesn't map to nodes, respond with pl
           try {
             const parsed = JSON.parse(jsonMatch3[0]);
             return { text: parsed.long || content.trim(), shortText: parsed.short || '' };
+          } catch {
+            return { text: content.trim() };
+          }
+        }
+        return { text: content.trim() };
+      }
+      case 'improve': {
+        const jsonMatch4 = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch4) {
+          try {
+            const parsed = JSON.parse(jsonMatch4[0]);
+            const improved = parsed.description
+              ? `${parsed.title}\n${parsed.description}`
+              : parsed.title || content.trim();
+            return { text: improved };
           } catch {
             return { text: content.trim() };
           }

@@ -11,7 +11,7 @@ import { AIService } from '../../services/ai.service';
   template: `
     @if (visible && nodeId) {
       <div class="context-menu" [style.left.px]="position.x" [style.top.px]="position.y">
-        <div class="menu-header">{{ nodeText }}</div>
+        <div class="menu-header" (mousedown)="startDrag($event)">⠿ {{ nodeText }}</div>
         <button (click)="onAction('generate-children')" [disabled]="loading">
           🌳 Generate children
         </button>
@@ -51,6 +51,10 @@ import { AIService } from '../../services/ai.service';
             @if (pendingShortText) {
               <button class="save-to-shape" (click)="saveToShape()">💾 Save to shape</button>
             }
+            @if (pendingImproveText) {
+              <button class="save-to-shape" (click)="applyImprove()">✅ Apply</button>
+              <button class="save-to-shape discard" (click)="discardImprove()">✖ Discard</button>
+            }
           </div>
         }
       </div>
@@ -81,6 +85,11 @@ import { AIService } from '../../services/ai.service';
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      cursor: grab;
+      user-select: none;
+    }
+    .menu-header:active {
+      cursor: grabbing;
     }
     button {
       display: block;
@@ -166,6 +175,15 @@ import { AIService } from '../../services/ai.service';
       background: var(--accent, #4a90d9);
       color: #fff;
     }
+    .save-to-shape.discard {
+      border-color: var(--danger, #e74c3c);
+      color: var(--danger, #e74c3c);
+      margin-left: 4px;
+    }
+    .save-to-shape.discard:hover {
+      background: var(--danger, #e74c3c);
+      color: #fff;
+    }
   `],
 })
 export class AIContextMenuComponent {
@@ -178,6 +196,10 @@ export class AIContextMenuComponent {
   resultText = '';
   promptText = '';
   pendingShortText: string | null = null;
+  pendingImproveText: string | null = null;
+  private dragOffset: { x: number; y: number } | null = null;
+  private onMouseMove = (e: MouseEvent) => this.onDrag(e);
+  private onMouseUp = () => this.stopDrag();
 
   constructor(
     private diagram: DiagramService,
@@ -245,8 +267,12 @@ export class AIContextMenuComponent {
           break;
         case 'improve':
           if (response.text) {
-            this.diagram.updateNodeText(this.nodeId, response.text);
-            this.resultText = `Updated: "${response.text}"`;
+            this.pendingImproveText = response.text;
+            const parts = response.text.split('\n');
+            const preview = parts.length > 1
+              ? `Title: "${parts[0]}"\nDescription: "${parts.slice(1).join('\n')}"`
+              : `Title: "${parts[0]}"`;
+            this.resultText = `Suggested:\n${preview}`;
           }
           break;
         case 'describe':
@@ -279,5 +305,42 @@ export class AIContextMenuComponent {
     this.diagram.updateNodeText(this.nodeId, current + '\n' + this.pendingShortText);
     this.pendingShortText = null;
     this.resultText = '✅ Saved to shape';
+  }
+
+  applyImprove(): void {
+    if (!this.nodeId || !this.pendingImproveText) return;
+    this.diagram.updateNodeText(this.nodeId, this.pendingImproveText);
+    this.nodeText = this.pendingImproveText;
+    this.pendingImproveText = null;
+    this.resultText = '✅ Applied';
+  }
+
+  discardImprove(): void {
+    this.pendingImproveText = null;
+    this.resultText = '';
+  }
+
+  startDrag(e: MouseEvent): void {
+    e.preventDefault();
+    this.dragOffset = {
+      x: e.clientX - this.position.x,
+      y: e.clientY - this.position.y,
+    };
+    document.addEventListener('mousemove', this.onMouseMove);
+    document.addEventListener('mouseup', this.onMouseUp);
+  }
+
+  private onDrag(e: MouseEvent): void {
+    if (!this.dragOffset) return;
+    this.position = {
+      x: e.clientX - this.dragOffset.x,
+      y: e.clientY - this.dragOffset.y,
+    };
+  }
+
+  private stopDrag(): void {
+    this.dragOffset = null;
+    document.removeEventListener('mousemove', this.onMouseMove);
+    document.removeEventListener('mouseup', this.onMouseUp);
   }
 }
