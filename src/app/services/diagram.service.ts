@@ -107,6 +107,8 @@ export class DiagramService {
   private selectedIds = new Set<string>();
   private muteChanges = false;
   private justCreatedId: string | null = null;
+  private dragStartPos: { [id: string]: { x: number; y: number } } | null = null;
+  private dragOriginId: string | null = null;
 
   private getCellText(cell: joint.dia.Cell): string {
     const title = (cell.attr('title/text') as string) || (cell.attr('label/text') as string) || '';
@@ -162,6 +164,52 @@ export class DiagramService {
   }
 
   private setupEvents(): void {
+    // Multi-select group drag
+    this.paper.on('element:pointerdown', (elementView: joint.dia.ElementView) => {
+      const id = elementView.model.id as string;
+      if (this.selectedIds.has(id) && this.selectedIds.size > 1) {
+        this.dragOriginId = id;
+        this.dragStartPos = {};
+        this.selectedIds.forEach(sid => {
+          const el = this.graph.getCell(sid) as joint.dia.Element;
+          if (el) {
+            const p = el.position();
+            this.dragStartPos![sid] = { x: p.x, y: p.y };
+          }
+        });
+      } else {
+        this.dragStartPos = null;
+        this.dragOriginId = null;
+      }
+    });
+
+    this.paper.on('element:pointermove', (elementView: joint.dia.ElementView) => {
+      if (!this.dragStartPos || !this.dragOriginId) return;
+      const id = elementView.model.id as string;
+      if (id !== this.dragOriginId) return;
+
+      const origin = this.dragStartPos[id];
+      if (!origin) return;
+      const current = (elementView.model as joint.dia.Element).position();
+      const dx = current.x - origin.x;
+      const dy = current.y - origin.y;
+
+      this.selectedIds.forEach(sid => {
+        if (sid === id) return;
+        const startPos = this.dragStartPos![sid];
+        if (!startPos) return;
+        const el = this.graph.getCell(sid) as joint.dia.Element;
+        if (el) {
+          el.position(startPos.x + dx, startPos.y + dy);
+        }
+      });
+    });
+
+    this.paper.on('element:pointerup', () => {
+      this.dragStartPos = null;
+      this.dragOriginId = null;
+    });
+
     // Node click — single or multi select
     this.paper.on('element:pointerclick', (elementView: joint.dia.ElementView, evt: joint.dia.Event) => {
       this.zone.run(() => {
