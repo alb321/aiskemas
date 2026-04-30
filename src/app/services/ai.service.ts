@@ -75,8 +75,10 @@ Given a concept, generate 3-6 direct child concepts that are key sub-topics.
 Respond ONLY with a JSON array of objects: [{"text": "concept name"}]
 Keep each concept name short (1-4 words).`;
       case 'describe':
-        return `You are a study assistant. Given a concept, provide a clear, concise explanation (2-4 sentences) suitable for studying.
-Respond with plain text only.`;
+        return `You are a study assistant. Given a concept, provide two versions:
+1. A detailed explanation (2-4 sentences) suitable for studying.
+2. A short summary (max 8-10 words) to annotate a concept map node.
+Respond ONLY with JSON: {"long": "detailed explanation", "short": "brief summary"}`;
       case 'improve':
         return `You are a study assistant. Given a concept label, suggest a better, more precise or memorable wording.
 Respond with plain text: just the improved label.`;
@@ -142,6 +144,18 @@ Keep each concept name short (1-4 words). If the instruction asks for something 
           try {
             const nodes = JSON.parse(jsonMatch2[0]);
             return { nodes };
+          } catch {
+            return { text: content.trim() };
+          }
+        }
+        return { text: content.trim() };
+      }
+      case 'describe': {
+        const jsonMatch3 = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch3) {
+          try {
+            const parsed = JSON.parse(jsonMatch3[0]);
+            return { text: parsed.long || content.trim(), shortText: parsed.short || '' };
           } catch {
             return { text: content.trim() };
           }

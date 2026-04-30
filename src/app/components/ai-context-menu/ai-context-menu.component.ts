@@ -46,7 +46,12 @@ import { AIService } from '../../services/ai.service';
           <div class="loading">Thinking...</div>
         }
         @if (resultText) {
-          <div class="result">{{ resultText }}</div>
+          <div class="result">
+            {{ resultText }}
+            @if (pendingShortText) {
+              <button class="save-to-shape" (click)="saveToShape()">💾 Save to shape</button>
+            }
+          </div>
         }
       </div>
     }
@@ -145,6 +150,22 @@ import { AIService } from '../../services/ai.service';
       border-radius: 4px;
       font-size: 14px;
     }
+    .save-to-shape {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      border: 1px solid var(--accent, #4a90d9);
+      border-radius: 4px;
+      background: var(--bg-secondary, #f5f5f5);
+      color: var(--accent, #4a90d9);
+      cursor: pointer;
+      width: auto !important;
+    }
+    .save-to-shape:hover {
+      background: var(--accent, #4a90d9);
+      color: #fff;
+    }
   `],
 })
 export class AIContextMenuComponent {
@@ -156,6 +177,7 @@ export class AIContextMenuComponent {
   loading = false;
   resultText = '';
   promptText = '';
+  pendingShortText: string | null = null;
 
   constructor(
     private diagram: DiagramService,
@@ -204,6 +226,7 @@ export class AIContextMenuComponent {
 
     this.loading = true;
     this.resultText = '';
+    this.pendingShortText = null;
 
     try {
       const context = this.diagram.getNodeContext(this.nodeId);
@@ -227,6 +250,11 @@ export class AIContextMenuComponent {
           }
           break;
         case 'describe':
+          this.resultText = response.text || 'No response';
+          if (response.shortText) {
+            this.pendingShortText = response.shortText;
+          }
+          break;
         case 'summarize':
           this.resultText = response.text || 'No response';
           break;
@@ -243,5 +271,13 @@ export class AIContextMenuComponent {
       this.diagram.removeElement(this.nodeId);
       this.visible = false;
     }
+  }
+
+  saveToShape(): void {
+    if (!this.nodeId || !this.pendingShortText) return;
+    const current = this.diagram.getNodeText(this.nodeId);
+    this.diagram.updateNodeText(this.nodeId, current + '\n' + this.pendingShortText);
+    this.pendingShortText = null;
+    this.resultText = '✅ Saved to shape';
   }
 }

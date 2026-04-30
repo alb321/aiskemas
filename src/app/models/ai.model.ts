@@ -22,4 +22,5 @@ export interface AIGeneratedNode {
 export interface AIResponse {
   nodes?: AIGeneratedNode[];
   text?: string;
+  shortText?: string;
 }
