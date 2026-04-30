@@ -93,8 +93,9 @@ Keep it to 2 levels deep max, 3-6 children per node.`;
       case 'prompt':
         return `You are a study assistant that helps build concept maps.
 Given a concept and a user instruction, generate the requested nodes.
-Respond ONLY with a JSON array of objects: [{"text": "concept name"}]
-Keep each concept name short (1-4 words). If the instruction asks for something that doesn't map to nodes, respond with plain text instead.`;
+Respond ONLY with a JSON array of objects: [{"text": "concept name", "description": "optional short description"}]
+The "text" field is the concept title (1-4 words). The "description" field is optional — include it only if the user asks for descriptions or explanations.
+If the instruction asks for something that doesn't map to nodes, respond with plain text instead.`;
       default:
         return 'You are a helpful study assistant.';
     }
@@ -125,7 +126,10 @@ Keep each concept name short (1-4 words). If the instruction asks for something 
       case 'generate-children': {
         const jsonMatch = content.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
-          const nodes = JSON.parse(jsonMatch[0]);
+          const raw = JSON.parse(jsonMatch[0]);
+          const nodes = raw.map((n: any) => ({
+            text: n.description ? `${n.text}\n${n.description}` : n.text,
+          }));
           return { nodes };
         }
         return { nodes: [] };
@@ -142,7 +146,10 @@ Keep each concept name short (1-4 words). If the instruction asks for something 
         const jsonMatch2 = content.match(/\[[\s\S]*\]/);
         if (jsonMatch2) {
           try {
-            const nodes = JSON.parse(jsonMatch2[0]);
+            const raw = JSON.parse(jsonMatch2[0]);
+            const nodes = raw.map((n: any) => ({
+              text: n.description ? `${n.text}\n${n.description}` : n.text,
+            }));
             return { nodes };
           } catch {
             return { text: content.trim() };

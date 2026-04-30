@@ -506,12 +506,49 @@ export class DiagramService {
     if (!parent) return;
 
     const pos = parent.position();
-    const spacing = 180;
-    const startX = pos.x - ((texts.length - 1) * spacing) / 2;
-    const childY = pos.y + 120;
+    const parentSize = parent.size();
+    const spacing = 200;
+    const childW = 160;
+    const childH = 60;
+    const gapY = 80;
+
+    // Center children under parent
+    const totalWidth = texts.length * childW + (texts.length - 1) * (spacing - childW);
+    const startX = pos.x + parentSize.width / 2 - totalWidth / 2;
+    let childY = pos.y + parentSize.height + gapY;
+
+    // Collect existing element bboxes (exclude parent)
+    const existing = this.graph.getElements()
+      .filter(el => el.id !== parentId)
+      .map(el => {
+        const p = el.position();
+        const s = el.size();
+        return { x: p.x, y: p.y, w: s.width, h: s.height };
+      });
+
+    // Check if a rect overlaps any existing element
+    const overlaps = (x: number, y: number, w: number, h: number): boolean => {
+      const pad = 20;
+      return existing.some(e =>
+        x < e.x + e.w + pad && x + w + pad > e.x &&
+        y < e.y + e.h + pad && y + h + pad > e.y
+      );
+    };
+
+    // Find a Y where ALL children fit without overlap
+    let maxAttempts = 20;
+    while (maxAttempts-- > 0) {
+      const anyOverlap = texts.some((_, i) => {
+        const cx = startX + i * spacing;
+        return overlaps(cx, childY, childW, childH);
+      });
+      if (!anyOverlap) break;
+      childY += childH + 30;
+    }
 
     texts.forEach((text, i) => {
-      const childId = this.addNode(text, startX + i * spacing, childY);
+      const cx = startX + i * spacing;
+      const childId = this.addNode(text, cx, childY);
       this.addEdge(parentId, childId);
     });
   }
