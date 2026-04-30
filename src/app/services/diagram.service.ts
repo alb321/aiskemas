@@ -27,6 +27,55 @@ class ResizeTool extends joint.elementTools.Control {
     model.resize(newWidth, newHeight);
   }
 }
+
+// Custom shape with bold title + normal body text
+const ConceptNode = joint.dia.Element.define('aiskemas.ConceptNode', {
+  attrs: {
+    body: {
+      refWidth: '100%',
+      refHeight: '100%',
+      fill: '#ffffff',
+      stroke: '#333333',
+      strokeWidth: 2,
+      rx: 8,
+      ry: 8,
+    },
+    title: {
+      refX: '50%',
+      refY: '50%',
+      textAnchor: 'middle',
+      textVerticalAnchor: 'middle',
+      fontWeight: 'bold',
+      fontSize: 14,
+      fontFamily: "'Inter', sans-serif",
+      fill: '#333333',
+      textWrap: { width: -20, ellipsis: true },
+    },
+    body_text: {
+      refX: '50%',
+      refY: null as any,
+      textAnchor: 'middle',
+      textVerticalAnchor: 'top',
+      fontWeight: 'normal',
+      fontSize: 13,
+      fontFamily: "'Inter', sans-serif",
+      fill: '#555555',
+      textWrap: { width: -20, ellipsis: true },
+      display: 'none',
+    },
+  },
+}, {
+  markup: [{
+    tagName: 'rect',
+    selector: 'body',
+  }, {
+    tagName: 'text',
+    selector: 'title',
+  }, {
+    tagName: 'text',
+    selector: 'body_text',
+  }],
+});
 @Injectable({ providedIn: 'root' })
 export class DiagramService {
   private graph!: joint.dia.Graph;
@@ -34,6 +83,12 @@ export class DiagramService {
   private selectedIds = new Set<string>();
   private muteChanges = false;
   private justCreatedId: string | null = null;
+
+  private getCellText(cell: joint.dia.Cell): string {
+    const title = (cell.attr('title/text') as string) || (cell.attr('label/text') as string) || '';
+    const body = (cell.attr('body_text/text') as string) || '';
+    return body ? `${title}\n${body}` : title;
+  }
 
   nodeSelected$ = new Subject<{ id: string; text: string; position: { x: number; y: number } } | null>();
   selectionChanged$ = new Subject<string[]>();
@@ -88,7 +143,7 @@ export class DiagramService {
       this.zone.run(() => {
         const model = elementView.model;
         const id = model.id as string;
-        const text = (model.attr('label/text') as string) || '';
+        const text = this.getCellText(model);
         const bbox = elementView.getBBox();
         const nativeEvt = (evt as any).originalEvent || evt;
         const isMulti = nativeEvt?.shiftKey || nativeEvt?.metaKey || nativeEvt?.ctrlKey;
@@ -169,7 +224,7 @@ export class DiagramService {
       this.zone.run(() => {
         const model = elementView.model;
         const id = model.id as string;
-        const text = (model.attr('label/text') as string) || '';
+        const text = this.getCellText(model);
         const bbox = elementView.getBBox();
         this.editNode$.next({
           id,
@@ -184,7 +239,7 @@ export class DiagramService {
       this.zone.run(() => {
         const model = elementView.model;
         const id = model.id as string;
-        const text = (model.attr('label/text') as string) || '';
+        const text = this.getCellText(model);
         const bbox = elementView.getBBox();
         const paperRect = this.paper.el.getBoundingClientRect();
         this.nodeHover$.next({ id, text, bbox: {
@@ -260,7 +315,7 @@ export class DiagramService {
         const bbox = view.getBBox();
         this.nodeSelected$.next({
           id,
-          text: (el.attr('label/text') as string) || '',
+          text: this.getCellText(el),
           position: { x: bbox.x + bbox.width, y: bbox.y },
         });
       }
@@ -289,11 +344,35 @@ export class DiagramService {
     return { x: point.x, y: point.y };
   }
 
+  private splitText(text: string): { title: string; body: string } {
+    const idx = text.indexOf('\n');
+    if (idx === -1) return { title: text, body: '' };
+    return { title: text.substring(0, idx), body: text.substring(idx + 1) };
+  }
+
+  private applyTextToNode(cell: joint.dia.Cell, text: string): void {
+    const { title, body } = this.splitText(text);
+    if (body) {
+      cell.attr('title/text', title);
+      cell.attr('title/refY', 12);
+      cell.attr('title/textVerticalAnchor', 'top');
+      cell.attr('body_text/text', body);
+      cell.attr('body_text/refY', 30);
+      cell.attr('body_text/display', 'block');
+    } else {
+      cell.attr('title/text', title);
+      cell.attr('title/refY', '50%');
+      cell.attr('title/textVerticalAnchor', 'middle');
+      cell.attr('body_text/text', '');
+      cell.attr('body_text/display', 'none');
+    }
+  }
+
   addNode(text: string, x: number, y: number, style?: Partial<NodeStyle>): string {
     const nodeStyle = { ...DEFAULT_NODE_STYLE, ...style };
     const id = uuidv4();
 
-    const rect = new joint.shapes.standard.Rectangle({
+    const node = new ConceptNode({
       id,
       position: { x, y },
       size: { width: 160, height: 60 },
@@ -304,19 +383,22 @@ export class DiagramService {
           strokeWidth: nodeStyle.strokeWidth,
           rx: 8,
           ry: 8,
-          magnet: true,
         },
-        label: {
-          text,
+        title: {
           fontSize: nodeStyle.fontSize,
           fontFamily: nodeStyle.fontFamily,
           fill: nodeStyle.fontColor,
-          textWrap: { width: -20, height: -10, ellipsis: true },
+        },
+        body_text: {
+          fontSize: (nodeStyle.fontSize || 14) - 1,
+          fontFamily: nodeStyle.fontFamily,
+          fill: nodeStyle.fontColor,
         },
       },
     });
 
-    this.graph.addCell(rect);
+    this.graph.addCell(node);
+    this.applyTextToNode(node, text);
     return id;
   }
 
@@ -349,7 +431,7 @@ export class DiagramService {
   updateNodeText(id: string, text: string): void {
     const cell = this.graph.getCell(id);
     if (cell) {
-      cell.attr('label/text', text);
+      this.applyTextToNode(cell, text);
     }
   }
 
@@ -359,21 +441,33 @@ export class DiagramService {
     if (style.fill) cell.attr('body/fill', style.fill);
     if (style.stroke) cell.attr('body/stroke', style.stroke);
     if (style.strokeWidth) cell.attr('body/strokeWidth', style.strokeWidth);
-    if (style.fontSize) cell.attr('label/fontSize', style.fontSize);
-    if (style.fontFamily) cell.attr('label/fontFamily', style.fontFamily);
-    if (style.fontColor) cell.attr('label/fill', style.fontColor);
+    if (style.fontSize) {
+      cell.attr('title/fontSize', style.fontSize);
+      cell.attr('body_text/fontSize', style.fontSize - 1);
+    }
+    if (style.fontFamily) {
+      cell.attr('title/fontFamily', style.fontFamily);
+      cell.attr('body_text/fontFamily', style.fontFamily);
+    }
+    if (style.fontColor) {
+      cell.attr('title/fill', style.fontColor);
+      cell.attr('body_text/fill', style.fontColor);
+    }
   }
 
   getNodeText(id: string): string {
     const cell = this.graph.getCell(id);
-    return cell ? (cell.attr('label/text') as string) || '' : '';
+    if (!cell) return '';
+    const title = (cell.attr('title/text') as string) || '';
+    const body = (cell.attr('body_text/text') as string) || '';
+    return body ? `${title}\n${body}` : title;
   }
 
   getConnectedNodeTexts(id: string): string[] {
     const cell = this.graph.getCell(id);
     if (!cell) return [];
     const neighbors = this.graph.getNeighbors(cell as joint.dia.Element);
-    return neighbors.map(n => (n.attr('label/text') as string) || '');
+    return neighbors.map(n => this.getCellText(n));
   }
 
   getNodeContext(id: string): string {
@@ -390,7 +484,7 @@ export class DiagramService {
       const otherId = srcId === id ? tgtId : srcId;
       const other = this.graph.getCell(otherId);
       if (!other) continue;
-      const otherText = (other.attr('label/text') as string) || '';
+      const otherText = this.getCellText(other);
       if (srcId === id) {
         children.push(otherText);
       } else {
@@ -431,7 +525,7 @@ export class DiagramService {
       const size = el.size();
       nodes.push({
         id: el.id as string,
-        text: (el.attr('label/text') as string) || '',
+        text: this.getCellText(el),
         x: pos.x,
         y: pos.y,
         width: size.width,
@@ -479,7 +573,7 @@ export class DiagramService {
     this.graph.clear();
 
     schema.nodes.forEach(node => {
-      const rect = new joint.shapes.standard.Rectangle({
+      const rect = new ConceptNode({
         id: node.id,
         position: { x: node.x, y: node.y },
         size: { width: node.width, height: node.height },
@@ -491,16 +585,20 @@ export class DiagramService {
             rx: 8,
             ry: 8,
           },
-          label: {
-            text: node.text,
+          title: {
             fontSize: node.style.fontSize,
             fontFamily: node.style.fontFamily,
             fill: node.style.fontColor,
-            textWrap: { width: -20, height: -10, ellipsis: true },
+          },
+          body_text: {
+            fontSize: (node.style.fontSize || 14) - 1,
+            fontFamily: node.style.fontFamily,
+            fill: node.style.fontColor,
           },
         },
       });
       this.graph.addCell(rect);
+      this.applyTextToNode(rect, node.text);
     });
 
     schema.edges.forEach(edge => {
