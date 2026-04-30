@@ -45,15 +45,21 @@ const ConceptNode = joint.dia.Element.define('aiskemas.ConceptNode', {
       refY: '50%',
       textAnchor: 'middle',
       textVerticalAnchor: 'middle',
-      fontWeight: 'bold',
+      fontWeight: 'normal',
       fontSize: 14,
       fontFamily: "'Inter', sans-serif",
       fill: '#333333',
       textWrap: { width: -20, ellipsis: true },
     },
+    separator: {
+      refX: 10,
+      refWidth: -20,
+      height: 1,
+      fill: '#ccc',
+      display: 'none',
+    },
     body_text: {
       refX: '50%',
-      refY: null as any,
       textAnchor: 'middle',
       textVerticalAnchor: 'top',
       fontWeight: 'normal',
@@ -62,6 +68,18 @@ const ConceptNode = joint.dia.Element.define('aiskemas.ConceptNode', {
       fill: '#555555',
       textWrap: { width: -20, ellipsis: true },
       display: 'none',
+    },
+    add_btn: {
+      refX: '50%',
+      textAnchor: 'middle',
+      textVerticalAnchor: 'middle',
+      fontSize: 16,
+      fontFamily: "'Inter', sans-serif",
+      fill: '#aaa',
+      text: '+',
+      cursor: 'pointer',
+      display: 'none',
+      event: 'element:add-body',
     },
   },
 }, {
@@ -72,8 +90,14 @@ const ConceptNode = joint.dia.Element.define('aiskemas.ConceptNode', {
     tagName: 'text',
     selector: 'title',
   }, {
+    tagName: 'rect',
+    selector: 'separator',
+  }, {
     tagName: 'text',
     selector: 'body_text',
+  }, {
+    tagName: 'text',
+    selector: 'add_btn',
   }],
 });
 @Injectable({ providedIn: 'root' })
@@ -234,7 +258,7 @@ export class DiagramService {
       });
     });
 
-    // Hover on element
+    // Hover on element — show AI button + show add_btn if no body
     this.paper.on('element:mouseenter', (elementView: joint.dia.ElementView) => {
       this.zone.run(() => {
         const model = elementView.model;
@@ -248,12 +272,39 @@ export class DiagramService {
           width: bbox.width,
           height: bbox.height,
         } });
+        // Show + button if no body text
+        const bodyText = (model.attr('body_text/text') as string) || '';
+        if (!bodyText) {
+          const size = (model as joint.dia.Element).size();
+          model.attr('add_btn/refY', size.height - 8);
+          model.attr('add_btn/display', 'block');
+        }
       });
     });
 
-    this.paper.on('element:mouseleave', () => {
+    this.paper.on('element:mouseleave', (elementView: joint.dia.ElementView) => {
       this.zone.run(() => {
         this.nodeHover$.next(null);
+        elementView.model.attr('add_btn/display', 'none');
+      });
+    });
+
+    // + button clicked — add body section and trigger edit
+    this.paper.on('element:add-body', (elementView: joint.dia.ElementView, evt: joint.dia.Event) => {
+      evt.stopPropagation();
+      this.zone.run(() => {
+        const model = elementView.model;
+        const id = model.id as string;
+        const title = (model.attr('title/text') as string) || '';
+        // Set empty body to activate body section
+        this.applyTextToNode(model, title + '\n');
+        // Trigger inline edit so user can type body
+        const bbox = elementView.getBBox();
+        this.editNode$.next({
+          id,
+          text: title + '\n',
+          bbox: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
+        });
       });
     });
 
@@ -350,22 +401,77 @@ export class DiagramService {
     return { title: text.substring(0, idx), body: text.substring(idx + 1) };
   }
 
+  private measureTextWidth(text: string, font: string): number {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    ctx.font = font;
+    return Math.max(...text.split('\n').map(line => ctx.measureText(line).width));
+  }
+
+  private autoSizeNode(el: joint.dia.Element): void {
+    const titleText = (el.attr('title/text') as string) || '';
+    const bodyText = (el.attr('body_text/text') as string) || '';
+    const fontSize = (el.attr('title/fontSize') as number) || 14;
+    const fontFamily = (el.attr('title/fontFamily') as string) || "'Inter', sans-serif";
+
+    const titleFont = `${fontSize}px ${fontFamily}`;
+    const bodyFont = `${fontSize - 1}px ${fontFamily}`;
+
+    const titleW = titleText ? this.measureTextWidth(titleText, titleFont) : 0;
+    const bodyW = bodyText ? this.measureTextWidth(bodyText, bodyFont) : 0;
+
+    const padX = 32;
+    const minW = 100;
+    const maxW = 300;
+    const width = Math.max(minW, Math.min(maxW, Math.max(titleW, bodyW) + padX));
+    const innerW = width - padX;
+
+    const lineH = fontSize + 4;
+    const charW = fontSize * 0.55;
+    const titleLines = titleText ? Math.max(1, Math.ceil(titleText.length * charW / innerW)) : 1;
+
+    let height: number;
+    if (bodyText) {
+      const bodyCharW = (fontSize - 1) * 0.55;
+      const bodyLines = Math.max(1, Math.ceil(bodyText.length * bodyCharW / innerW));
+      const titleBlockH = titleLines * lineH;
+      const bodyBlockH = bodyLines * (lineH - 2);
+      height = 10 + titleBlockH + 8 + bodyBlockH + 10;
+    } else {
+      height = titleLines * lineH + 20;
+    }
+    height = Math.max(40, height);
+
+    el.resize(width, height);
+  }
+
   private applyTextToNode(cell: joint.dia.Cell, text: string): void {
     const { title, body } = this.splitText(text);
+    cell.attr('title/text', title);
     if (body) {
-      cell.attr('title/text', title);
-      cell.attr('title/refY', 12);
+      cell.attr('title/refY', 10);
       cell.attr('title/textVerticalAnchor', 'top');
+      const titleSize = (cell.attr('title/fontSize') as number) || 14;
+      const titleCharW = titleSize * 0.55;
+      const el = cell as joint.dia.Element;
+      const innerW = el.size().width - 32;
+      const titleLines = Math.max(1, Math.ceil(title.length * titleCharW / Math.max(innerW, 60)));
+      const sepY = 10 + titleLines * (titleSize + 4) + 2;
+      cell.attr('separator/y', sepY);
+      cell.attr('separator/display', 'block');
       cell.attr('body_text/text', body);
-      cell.attr('body_text/refY', 30);
+      cell.attr('body_text/refY', sepY + 6);
       cell.attr('body_text/display', 'block');
+      cell.attr('add_btn/display', 'none');
     } else {
-      cell.attr('title/text', title);
       cell.attr('title/refY', '50%');
       cell.attr('title/textVerticalAnchor', 'middle');
+      cell.attr('separator/display', 'none');
       cell.attr('body_text/text', '');
       cell.attr('body_text/display', 'none');
+      cell.attr('add_btn/display', 'none');
     }
+    this.autoSizeNode(cell as joint.dia.Element);
   }
 
   addNode(text: string, x: number, y: number, style?: Partial<NodeStyle>): string {
